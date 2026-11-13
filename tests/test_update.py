@@ -39,6 +39,8 @@ def test_check_uses_cache_and_reports(monkeypatch):
     assert st["available"] is False and st["latest"] == __version__
     st = update.check("https://example.com/update.json", force=True, fetch=lambda u: (_ for _ in ()).throw(OSError("timeout")))
     assert "timeout" in st["error"] and st["latest"] == __version__   # keeps the last manifest
+    # a build without a baked-in address and none in the settings: updates are off
+    monkeypatch.setattr(update, "release_info", lambda: {})
     assert update.check("", force=True, fetch=fetch)["configured"] is False
     with pytest.raises(ValueError):
         update.fetch_manifest("http://insecure.example/update.json")
