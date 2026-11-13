@@ -210,6 +210,7 @@ class MeetingSession:
         self._watch = [w.lower() for w in cfg.watch_words if w.strip()]
         self.briefing = None       # assistant.Briefing attached to this meeting
         self.assistant = None      # assistant.LiveAssistant while the meeting runs
+        self.translator = None     # translate.LiveTranslator when live captions are on
         self._assistant_lock = threading.Lock()
         self._queued_s = 0.0       # seconds of audio waiting for Whisper
         self.warnings: list[str] = []
@@ -240,6 +241,11 @@ class MeetingSession:
                 self.start_assistant(self.find_briefing())
             except Exception as exc:
                 log.warning("assistant not started: %s", exc)
+        if self.cfg.translate_live and self.cfg.translate_to:
+            try:
+                self.start_translation(self.cfg.translate_to)
+            except Exception as exc:
+                log.warning("live translation not started: %s", exc)
         self._write_meta(status="recording", template=self.template,
                          sources=[s.name for s in (self._mic, self._sys) if s is not None],
                          **({"event": {"title": self.event.title, "start": self.event.start, "attendees": self.event.attendees,
@@ -298,6 +304,7 @@ class MeetingSession:
         if self._wav is not None:
             self._wav.close()
         self._finish_assistant()
+        self.stop_translation()
         duration = self.elapsed()
         if self.safe_word_at is not None:
             # Audio between the safe word and its detection was already on
@@ -370,6 +377,25 @@ class MeetingSession:
     def assistant_snapshot(self) -> dict | None:
         a = self.assistant
         return a.snapshot() if a is not None else None
+
+    def start_translation(self, code: str) -> None:
+        """Live translated captions; can be switched on and off mid-meeting."""
+        from .translate import LiveTranslator
+        self.stop_translation()
+        t = LiveTranslator(code, self.cfg.assistant_model)
+        # the last few minutes, so the captions don't start empty
+        t.add([s for s in self.transcript.segments if s.end >= self.elapsed() - 120])
+        t.start()
+        self.translator = t
+
+    def stop_translation(self) -> None:
+        t, self.translator = self.translator, None
+        if t is not None:
+            t.stop()
+            try:
+                t.save(self.dir)
+            except OSError as exc:
+                log.warning("live translation save failed: %s", exc)
 
     def _finish_assistant(self) -> None:
         a = self.assistant
@@ -546,6 +572,9 @@ class MeetingSession:
             a = self.assistant
             if a is not None:
                 a.add_lines([format_line(s) for s in segs])
+            t = self.translator
+            if t is not None:
+                t.add(segs)
             if self._watch:
                 for s in segs:
                     low = s.text.lower()
@@ -713,12 +742,31 @@ def write_notes_for(folder: Path, transcript_text: str, meta: MeetingMeta, cfg: 
     data.pop("notes_error", None)
     data.pop("progress", None)
     write_json(meta_path, data)
+    if cfg.translate_to:
+        translate_in_background(folder, cfg, cfg.translate_to)
     if cfg.webhook_url:
         post_webhook(cfg.webhook_url, {"id": folder.name, "title": notes.title, "platform": meta.platform,
                                        "started_at": meta.started_at.isoformat(timespec="seconds"),
                                        "duration_s": meta.duration_s, "notes_markdown": md,
                                        "notes": notes.model_dump(), "transcript": transcript_text})
     return out
+
+
+def translate_in_background(folder: Path, cfg: Config, code: str) -> threading.Thread:
+    """Translate the transcript and notes without holding up anything else.
+    The meeting page shows "translating" until it's done."""
+    from .translate import translate_meeting
+    _update_meta(folder, translating=code, translate_error=None)
+
+    def run():
+        try:
+            translate_meeting(folder, cfg, code)
+        except Exception as exc:
+            log.warning("Translating %s failed: %s", folder.name, exc)
+            _update_meta(folder, translating=None, translate_error=str(exc)[:300])
+    t = threading.Thread(target=run, daemon=True, name=f"translate-{folder.name}")
+    t.start()
+    return t
 
 
 def resummarize(target: Path, cfg: Config, transcriber: Transcriber | None = None) -> Path:

@@ -280,3 +280,9 @@ pre.log { max-height: 320px; overflow: auto; background: var(--surface-2, #f1f3f
 .audio-row audio { flex: 1 1 320px; min-width: 0; height: 40px; }
 .audio-row .hint { flex-basis: 100%; margin: 0; }
 .tline .ts { cursor: pointer; }
+.captions { max-height: 320px; overflow: auto; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.lang-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.lang-chips button { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.lang-chips button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.translate-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+.translate-row select { width: auto; flex: 0 1 200px; }

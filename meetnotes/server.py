@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import __version__, config as config_mod, live, service
 from .config import Config, state_dir
+from .translate import LANGUAGES, translations
 
 log = logging.getLogger("meetnotes")
 WEB = Path(__file__).parent / "web"
@@ -53,6 +54,7 @@ EDITABLE = {
     "tray_icon": bool, "extra_instructions": str,
     "record_screen": bool, "screen_monitor": int, "screen_fps": int, "transcribe_mode": str,
     "assistant_live": bool, "assistant_interval": int, "assistant_style": str, "assistant_model": str,
+    "translate_to": str, "translate_live": bool,
     "calendar_urls": list, "notes_template": str, "watch_words": list, "webhook_url": str,
     "update_url": str, "update_check": bool,
 }
@@ -65,6 +67,7 @@ CHOICES = {
     "assistant_interval": {30, 45, 60, 90, 120},
     "assistant_style": {"quiet", "balanced", "active"},
     "assistant_model": {"claude-opus-5-5", "claude-sonnet-5-5"},
+    "translate_to": {"", *LANGUAGES},
 }
 
 
@@ -436,6 +439,8 @@ class App:
                 "enabled": s.assistant is not None, "assistant": s.assistant_snapshot(),
                 "alerts": list(getattr(s, "alerts", [])), "my_notes": s.my_notes(),
                 "template": getattr(s, "template", ""),
+                "translation": ({"lang": s.translator.code, "lines": s.translator.snapshot(), "error": s.translator.error}
+                                if getattr(s, "translator", None) is not None else None),
                 "event": {"title": s.event.title, "attendees": s.event.attendees} if getattr(s, "event", None) else None,
                 "briefing": {"id": s.briefing.id, "title": s.briefing.title} if s.briefing else None,
                 "briefings": todays[:10]}
@@ -494,7 +499,8 @@ class App:
         return {"id": mid, "meta": meta, "notes": read("notes.md"), "notes_json": notes_json,
                 "transcript": read("transcript.md"), "live_notes": read("live-notes.md"),
                 "my_notes": read("my-notes.md"), "has_screen": (folder / "screen.mp4").exists(),
-                "has_audio": self._audio_ready(mid, folder)}
+                "has_audio": self._audio_ready(mid, folder),
+                "translations": translations(folder)}
 
     def _audio_ready(self, mid: str, folder: Path) -> bool:
         wav, m4a = folder / "audio.wav", folder / "audio.m4a"
@@ -945,6 +951,27 @@ class Handler(BaseHTTPRequestHandler):
         if m:
             app.summarize(m.group(1))
             return self._json(202, {"started": m.group(1)})
+        m = re.fullmatch(r"/api/meetings/([^/]+)/translate", path)
+        if m:
+            from .session import translate_in_background
+            from .translate import lang_name
+            code = str(data.get("lang", ""))
+            lang_name(code)  # ValueError -> 400
+            folder = app.meeting_folder(m.group(1))
+            if not (folder / "transcript.md").exists() and not (folder / "notes.md").exists():
+                raise ValueError("nothing to translate yet")
+            translate_in_background(folder, app.cfg, code)
+            return self._json(202, {"started": code})
+        if path == "/api/live/translate":
+            s = live.current()
+            if s is None:
+                return self._json(409, {"error": "no meeting is being recorded"})
+            code = str(data.get("lang", ""))
+            if data.get("on", True):
+                s.start_translation(code)
+            else:
+                s.stop_translation()
+            return self._json(200, app.live_state())
         m = re.fullmatch(r"/api/meetings/([^/]+)/reveal", path)
         if m:
             if self.lan:

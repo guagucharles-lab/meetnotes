@@ -239,6 +239,7 @@ function viewHome(main) {
       <div id="banner"></div>
       <section class="card hero" id="hero" aria-live="polite"></section>
       <section class="card" id="live-card" hidden></section>
+      <section class="card" id="translate-card" hidden></section>
       <section class="card" id="notepad-card" hidden>
         <h2>Omat muistiinpanot</h2>
         <p class="muted small">Kirjoita kokouksen aikana vapaasti. Avustaja yhdistää nämä tekstiin ja kirjoittaa niiden pohjalta tarkemmat muistiinpanot.</p>
@@ -432,6 +433,8 @@ function renderLiveCard(st) {
   if (!card) return;
   const recording = st && (st.state === "recording" || st.state === "paused");
   card.hidden = !recording;
+  const tc = $("#translate-card");
+  if (tc) { tc.hidden = !recording; if (!recording) { tc.innerHTML = ""; trSig = ""; } }
   if (!recording) { clearInterval(liveTimer); liveTimer = null; liveSig = ""; card.innerHTML = ""; return; }
   if (!liveTimer) { loadLive(); liveTimer = setInterval(() => { if (!document.hidden) loadLive(); }, 3000); }
 }
@@ -442,6 +445,7 @@ async function loadLive() {
   let L;
   try { L = await api("/api/live"); } catch { return; }
   if (!L.active) return;
+  renderTranslation(L);
   const a = L.assistant;
   const alerts = L.alerts || [];
   const sig = JSON.stringify([L.enabled, L.briefing, a && a.feed.length, a && a.agenda, a && a.error, a && a.calls, L.briefings, alerts.length, L.template]);
@@ -487,6 +491,52 @@ async function loadLive() {
     try { await api("/api/live/ask", { question: q }); $("#live-q").value = ""; liveSig = ""; await loadLive(); }
     catch (err) { toast("Ei onnistunut: " + err.message); btn.disabled = false; btn.textContent = "Kysy"; }
   };
+}
+
+// ---------------------------------------------------------------- translation
+const TR_LANGS = [["en", "englanti"], ["fi", "suomi"], ["sv", "ruotsi"], ["de", "saksa"], ["fr", "ranska"], ["es", "espanja"],
+  ["et", "viro"], ["ru", "venäjä"], ["uk", "ukraina"], ["it", "italia"], ["nl", "hollanti"], ["pl", "puola"], ["pt", "portugali"],
+  ["no", "norja"], ["da", "tanska"], ["ja", "japani"], ["zh", "kiina"], ["ar", "arabia"], ["vi", "vietnam"]];
+const trName = (code) => (TR_LANGS.find(([c]) => c === code) || [code, code])[1];
+const trOptions = (sel) => TR_LANGS.map(([c, n]) => `<option value="${c}" ${c === sel ? "selected" : ""}>${n[0].toUpperCase() + n.slice(1)}</option>`).join("");
+let trSig = "";
+let trLang = "en";
+function renderTranslation(L) {
+  const card = $("#translate-card");
+  if (!card) return;
+  const T = L.translation;
+  if (T) trLang = T.lang;
+  const head = JSON.stringify([!!T, T && T.lang, T && T.error]);
+  if (card.dataset.head !== head || !card.innerHTML) {
+    card.dataset.head = head; trSig = "";
+    card.innerHTML = `
+      <div class="row" style="padding-top:0">
+        <div class="row-text"><div class="row-title">Käännös</div>
+          <div class="row-desc">${T ? `Kokous käännetään kielelle ${esc(trName(T.lang))} muutaman sekunnin viiveellä. Vain sinä näet tämän.` : "Näytä kokouksen puhe käännettynä toiselle kielelle."}</div></div>
+        <label class="switch"><input type="checkbox" id="tr-on" ${T ? "checked" : ""} aria-label="Käännös päällä"><span></span></label>
+      </div>
+      <div class="ask-row" style="margin-top:4px"><select id="tr-lang" aria-label="Käännöksen kieli">${trOptions(trLang)}</select></div>
+      ${T && T.error ? `<p class="banner error small" style="margin-top:10px">Käännös: ${esc(T.error)}</p>` : ""}
+      <div class="captions" id="tr-lines" ${T ? "" : "hidden"}></div>`;
+    const set = async (on, lang) => {
+      try { await api("/api/live/translate", { on, lang }); card.dataset.head = ""; loadLive(); }
+      catch (err) { toast("Ei onnistunut: " + err.message); }
+    };
+    $("#tr-on").onchange = (e) => set(e.target.checked, $("#tr-lang").value);
+    $("#tr-lang").onchange = (e) => { trLang = e.target.value; if ($("#tr-on").checked) set(true, trLang); };
+  }
+  if (!T) return;
+  const lines = T.lines || [];
+  const sig = lines.length + "|" + (lines.length ? lines[lines.length - 1].text : "");
+  if (sig === trSig) return;
+  trSig = sig;
+  const box = $("#tr-lines");
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  box.innerHTML = lines.length ? lines.map((x) => `<div class="tline"><span class="ts">${esc(x.t)}</span>
+      <span class="who${x.who === "Me" ? " me" : ""}">${x.who === "Me" ? "Minä" : x.who === "Others" ? "Muut" : ""}</span>
+      <span title="${esc(x.src)}">${esc(x.text)}</span></div>`).join("")
+    : `<p class="hint">Käännökset tulevat tähän, kun joku puhuu.</p>`;
+  if (atBottom) box.scrollTop = box.scrollHeight;
 }
 
 // ---------------------------------------------------------------- phone recorder (in-person meetings)
@@ -628,6 +678,10 @@ async function viewMeeting(main, id) {
       ${stats.words_per_minute ? `<span>Tahti <b>${stats.words_per_minute}</b> sanaa/min</span>` : ""}
     </div><div class="bar" aria-hidden="true"><i style="width:${stats.talk_me_pct}%"></i></div>`;
   const chapters = (m.notes_json && m.notes_json.chapters) || [];
+  const trs = m.translations || {};
+  let viewLang = "";
+  const notesText = () => (viewLang && trs[viewLang] && trs[viewLang].notes) || m.notes;
+  const transcriptText = () => (viewLang && trs[viewLang] && trs[viewLang].transcript) || m.transcript;
   if (m.live_notes && !hasNotes) tabs.unshift(["live", "Väliaikaiset"]);
   const active = STATUS && STATUS.folder_id === id && ["recording", "paused", "finishing", "writing-notes"].includes(STATUS.state);
   // Missing notes of a finished meeting open on the Notes tab, where the reason and "try again" are.
@@ -644,21 +698,44 @@ async function viewMeeting(main, id) {
         : `<button type="button" class="btn small" id="reveal">Näytä tiedosto</button>`}
       <span class="hint">Koko kokouksen ääni. Klikkaa tekstin aikaleimaa, niin ääni alkaa siitä kohdasta.</span></div>` : ""}
     ${chapters.length ? `<ul class="chapters" aria-label="Aiheet">${chapters.map((c) => `<li><button type="button" data-seek="${esc(c.start)}"><span class="ts">${esc(c.start)}</span><span>${esc(c.title)}</span></button></li>`).join("")}</ul>` : ""}
+    ${(m.transcript || m.notes) && !active ? `<div class="translate-row">
+      <select id="tr-target" aria-label="Käännä kielelle">${trOptions(meta.translating || "en")}</select>
+      <button type="button" class="btn small" id="tr-go" ${meta.translating ? "disabled" : ""}>Käännä</button>
+      <span class="hint" id="tr-status">${meta.translating ? `Käännetään: ${esc(trName(meta.translating))}…` : ""}</span></div>` : ""}
+    ${meta.translate_error ? `<div class="banner error small" style="margin-bottom:12px">Käännös epäonnistui: ${esc(meta.translate_error)}</div>` : ""}
+    ${Object.keys(trs).length ? `<div class="lang-chips" id="lang-chips"><button type="button" data-lang="" aria-pressed="true">Alkuperäinen</button>
+      ${Object.entries(trs).map(([c]) => `<button type="button" data-lang="${esc(c)}" aria-pressed="false">${esc(trName(c)[0].toUpperCase() + trName(c).slice(1))}</button>`).join("")}</div>` : ""}
     <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${k === first}">${l}</button>`).join("")}</div>
     <article class="card md" id="content"></article>
     <div class="actions" id="del-row" style="margin-top:20px"><button class="btn ghost small" id="del">Poista kokous</button></div>`;
   const show = (k) => {
     main.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === k)));
     // The topics are already shown as clickable chapters above: don't repeat them in the notes.
-    const notesBody = (m.notes || "").replace(/^# .*\n/, "").replace(/^## (Aiheet|Topics|Ämnen)\n[\s\S]*?(?=^## |(?![\s\S]))/m, chapters.length ? "" : "$&");
+    const notesBody = (notesText() || "").replace(/^# .*\n/, "").replace(/^## (Aiheet|Topics|Ämnen)\n[\s\S]*?(?=^## |(?![\s\S]))/m, chapters.length ? "" : "$&");
     $("#content").innerHTML = k === "notes" ? (hasNotes ? markdown(notesBody) : notesMissing(meta, id))
       : k === "live" ? markdown(m.live_notes)
       : k === "mine" ? `<div class="answer">${esc(m.my_notes)}</div>`
       : k === "video" ? `<video class="screen" controls preload="metadata" playsinline
           src="/api/meetings/${encodeURIComponent(id)}/screen.mp4?t=${encodeURIComponent(TOKEN)}"></video>
           <p class="hint" style="margin-top:8px">Näyttö ja kokouksen ääni. Tiedosto: screen.mp4 kokouksen kansiossa.</p>`
-      : transcriptHtml(m.transcript);
+      : transcriptHtml(transcriptText());
   };
+  main.querySelectorAll("[data-lang]").forEach((b) => (b.onclick = () => {
+    viewLang = b.dataset.lang;
+    main.querySelectorAll("[data-lang]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    const cur = main.querySelector("[data-tab][aria-selected=true]");
+    show(cur ? cur.dataset.tab : "notes");
+  }));
+  if ($("#tr-go")) $("#tr-go").onclick = async () => {
+    const lang = $("#tr-target").value;
+    $("#tr-go").disabled = true;
+    try {
+      await api(`/api/meetings/${encodeURIComponent(id)}/translate`, { lang });
+      $("#tr-status").textContent = `Käännetään: ${trName(lang)}… Tämä kestää yleensä alle minuutin.`;
+      pollTranslate(id);
+    } catch (err) { toast("Ei onnistunut: " + err.message); $("#tr-go").disabled = false; }
+  };
+  if (meta.translating) pollTranslate(id);
   const toSecs = (ts) => ts.split(":").reduce((a, x) => a * 60 + Number(x), 0);
   main.addEventListener("click", (e) => {
     const ts = e.target.closest && e.target.closest(".tline .ts");
@@ -694,7 +771,7 @@ async function viewMeeting(main, id) {
     if (row) { row.closest(".tline").scrollIntoView({ block: "center" }); row.closest(".tline").style.background = "var(--accent-soft)"; }
   }));
   $("#copy").onclick = async () => {
-    const text = hasNotes ? m.notes : m.transcript;
+    const text = hasNotes ? notesText() : transcriptText();
     try { await navigator.clipboard.writeText(text); toast("Kopioitu leikepöydälle"); }
     catch { const r = document.createRange(); r.selectNodeContents($("#content")); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Valitse ja kopioi (Ctrl+C)"); }
   };
@@ -722,6 +799,18 @@ function notesMissing(meta, id) {
     : `<p class="muted">Muistiinpanoja ei vielä ole.</p>`;
   return `${why}<button class="btn primary" id="retry">${meta.status === "notes_failed" ? "Yritä uudelleen" : "Kirjoita muistiinpanot"}</button>
     <p class="hint" style="margin-top:8px">Jos tekstiä ei ole, se tehdään ensin äänitiedostosta.</p>`;
+}
+
+let trPoll = null;
+function pollTranslate(id) {
+  clearInterval(trPoll);
+  trPoll = setInterval(async () => {
+    if (!location.hash.startsWith("#/meetings/")) return clearInterval(trPoll);
+    try {
+      const m = await api("/api/meetings/" + encodeURIComponent(id));
+      if (!m.meta.translating) { clearInterval(trPoll); if (!m.meta.translate_error) toast("Käännös valmis"); route(); }
+    } catch { clearInterval(trPoll); }
+  }, 3000);
 }
 
 let pollTimer = null;
@@ -999,6 +1088,15 @@ async function viewSettings(main) {
       </section>
 
       <section class="card">
+        <h2>Käännös</h2>
+        <p class="muted small">Kääntää kokouksen tekstin ja muistiinpanot toiselle kielelle. Alkuperäiset säilyvät, ja kokouksen sivulla voi vaihtaa kielten välillä. Yksittäisen kokouksen voi kääntää myös sen omalta sivulta.</p>
+        <label class="field"><span>Käännä jokainen kokous automaattisesti kielelle</span><select id="translate_to">
+          <option value="" ${s.translate_to ? "" : "selected"}>Ei automaattista käännöstä</option>${trOptions(s.translate_to)}</select>
+          <span class="hint">Käännös tehdään muistiinpanojen jälkeen. Tunnin kokous maksaa noin 0,3–0,5 €.</span></label>
+        ${toggle("translate_live", "Käännös myös kokouksen aikana", "Koti-sivulla näkyy puhe käännettynä muutaman sekunnin viiveellä. Voit kytkeä sen myös kesken kokouksen.", s.translate_live)}
+      </section>
+
+      <section class="card">
         <h2>Avustaja kokouksen aikana</h2>
         <p class="muted small">Seuraa keskustelua Clauden avulla ja ehdottaa, mitä ottaa esiin. Jokainen päivitys on yksi API-kutsu, joten tunnin kokous maksaa suunnilleen 0,5–1 €.</p>
         ${toggle("assistant_live", "Avustaja päällä kokouksissa", "Käynnistyy itse jokaisessa kokouksessa. Voit kytkeä sen myös kokouksen aikana kotisivulta.", s.assistant_live)}
@@ -1185,6 +1283,7 @@ async function viewSettings(main) {
       record_screen: chk("record_screen"), screen_monitor: Number(val("screen_monitor")), screen_fps: Number(val("screen_fps")),
       assistant_live: chk("assistant_live"), assistant_style: val("assistant_style"), assistant_interval: Number(val("assistant_interval")),
       assistant_model: val("assistant_model"),
+      translate_to: val("translate_to"), translate_live: chk("translate_live"),
       calendar_urls: val("calendar_urls"), notes_template: val("notes_template"), watch_words: val("watch_words"), webhook_url: val("webhook_url"),
     };
     if ($("#autostart")) data.autostart = chk("autostart");

@@ -40,6 +40,11 @@ def respond(req):
             "followups_from_last_time": [{"item": "Lähetä raportti", "status": "open", "note": "ei mainittu"}] if prev else [],
             "sections": [{"title": "Asiakkaan tarpeet", "items": ["Toimitus tammikuussa"]}] if tmpl_sales else [],
         }, ensure_ascii=False)
+    if "lines" in props and "translate meeting transcript lines" in system:  # transcript translation
+        items = json.loads(last)["lines"]
+        return json.dumps({"lines": [{"id": x["id"], "text": "EN: " + x["text"]} for x in items]}, ensure_ascii=False)
+    if "Translate these meeting notes" in system:
+        return "\n".join(("# EN " + l[2:]) if l.startswith("# ") else l for l in last.splitlines()).replace("Yhteenveto", "Summary")
     if "nudges" in props:  # live assistant
         agenda = re.findall(r"^\d+\. (.+)$", system, re.M)
         nudges = []

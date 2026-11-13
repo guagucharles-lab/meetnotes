@@ -87,6 +87,8 @@ class Config:
     assistant_live: bool = False       # follow the meeting live and suggest what to bring up
     assistant_interval: int = 45       # seconds between live updates (each is one Claude call)
     assistant_style: str = "balanced"  # quiet = answer questions, flag decisions | balanced | active
+    translate_to: str = ""             # e.g. "en": translate every meeting (transcript + notes) afterwards
+    translate_live: bool = False       # also show live translated captions during the meeting
     assistant_model: str = "claude-opus-5-5"  # e.g. claude-sonnet-5-5 for cheaper live updates
     assistant_effort: str = "low"      # effort for live updates; preparation always uses "high"
 
@@ -161,6 +163,8 @@ COMMENTS = {
     "assistant_live": "Follow the meeting live with Claude and suggest what to bring up (one call every assistant_interval seconds).",
     "assistant_style": "quiet = only answers and decisions | balanced | active = more suggestions.",
     "assistant_model": "Model for live updates; preparation and notes use claude_model.",
+    "translate_to": "Language code (en, fi, sv, ...) to translate each meeting into afterwards. Empty = off.",
+    "translate_live": "Show live translated captions during meetings (needs translate_to).",
     "record_screen": "Also record a video of the screen during meetings (screen.mp4, with the meeting audio).",
     "screen_monitor": "1 = main screen, 2 = second screen, 0 = all screens together.",
     "app_port": "Port of the app on this computer (127.0.0.1 only).",

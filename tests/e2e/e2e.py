@@ -143,8 +143,13 @@ const {{ chromium }} = require("playwright");
   await p.waitForSelector(".nudge.answer", {{ timeout: 30000 }});
   const answer = await p.textContent(".nudge.answer .text");
   const agenda = await p.$$eval(".agenda span", (s) => s.map((x) => x.textContent));
+  // live translation: switch on, captions arrive in English
+  await p.waitForSelector("#translate-card:not([hidden]) #tr-on", {{ state: "attached" }});
+  await p.click("#translate-card .switch");
+  await p.waitForFunction(() => [...document.querySelectorAll("#tr-lines .tline")].some((x) => x.textContent.includes("EN: ")), null, {{ timeout: 30000 }});
+  const captions = await p.$$eval("#tr-lines .tline", (r) => r.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   await p.screenshot({{ path: "{D}/shots/live.png", fullPage: true }});
-  console.log(JSON.stringify({{ answer, agenda, errs }}));
+  console.log(JSON.stringify({{ answer, agenda, captions, errs }}));
   await b.close();
 }})().catch((e) => {{ console.log(JSON.stringify({{ error: e.message }})); process.exit(0); }});
 """, timeout=180))))
@@ -156,6 +161,7 @@ const {{ chromium }} = require("playwright");
     check("browser: notepad saved, keyword alert, assistant nudge, live answer",
           not bl.get("error") and bl.get("answer", "").startswith("Vastaus: Mitä on sovittu toimituksesta") and not bl.get("errs"), bl)
     check("browser: agenda chips from the briefing", bl.get("agenda") and bl["agenda"][0].startswith("Hinta ja maksuehdot"), bl.get("agenda"))
+    check("live translation captions during the meeting", any("EN: Puheenvuoro" in c for c in bl.get("captions") or []), (bl.get("captions") or [])[:3])
     zoom.terminate(); zoom.wait()
     folder = (Path(D / "notes") / st["folder_id"]) if st and st.get("folder_id") else None
     done = wait(lambda: folder and (folder / "notes.md").exists() and api("/api/status")[1].get("state") == "watching", 120)
@@ -172,6 +178,8 @@ const {{ chromium }} = require("playwright");
         aj = json.loads((folder / "assistant.json").read_text()) if (folder / "assistant.json").exists() else {}
         kinds = {f["kind"] for f in aj.get("feed", [])}
         check("assistant feed saved (nudges, question, answer)", {"question", "answer"} <= kinds and kinds & {"heads_up", "action"}, kinds)
+        lt = folder / "live-translation.en.md"
+        check("live translation saved with the meeting", lt.exists() and "EN: " in lt.read_text(), lt.exists())
         check("screen recording with audio", (folder / "screen.mp4").exists() and (folder / "screen.mp4").stat().st_size > 10_000)
         try:
             import av
@@ -247,6 +255,16 @@ const {{ chromium }} = require("playwright");
   out.audioSeek = await p.$eval("#rec-audio", (a) => a.currentTime);
   out.audioSeekTo = await p.textContent(".tline .ts >> nth=2");
   out.reveal = await p.$$eval("#reveal", (b) => b.length);
+  // translate the finished meeting into English and switch the view
+  await p.selectOption("#tr-target", "en"); await p.click("#tr-go");
+  await p.waitForSelector('#lang-chips [data-lang="en"]', {{ timeout: 40000 }});
+  await p.click('#lang-chips [data-lang="en"]');
+  await p.click("[data-tab=transcript]");
+  out.trTranscript = (await p.textContent("#content")).slice(0, 300);
+  await p.click("[data-tab=notes]");
+  out.trNotes = (await p.textContent("#content")).slice(0, 300);
+  await p.click('#lang-chips [data-lang=""]');
+  out.trBack = (await p.textContent("#content")).slice(0, 120);
   await p.click("[data-tab=video]");
   await p.waitForFunction(() => {{ const v = document.querySelector("video.screen"); return v && v.readyState >= 1 && v.duration > 0; }}, null, {{ timeout: 20000 }});
   out.video = await p.$eval("video.screen", (v) => v.duration);
@@ -304,6 +322,10 @@ const {{ chromium }} = require("playwright");
     _to = sum(int(x) * 60 ** i for i, x in enumerate(reversed((ui.get("audioSeekTo") or "0").split(":"))))
     check("transcript timestamp seeks the audio", abs((ui.get("audioSeek") or -9) - _to) < 1.5, (ui.get("audioSeek"), ui.get("audioSeekTo")))
     check("show-file button on the computer", ui.get("reveal") == 1)
+    check("translate a meeting: English transcript", "EN: " in (ui.get("trTranscript") or ""), ui.get("trTranscript"))
+    check("translate a meeting: English notes, original kept", "Yhteenveto" not in (ui.get("trNotes") or "x") and "EN: " not in (ui.get("trBack") or ""), (ui.get("trNotes"), ui.get("trBack")))
+    _en = list((D / "notes").glob("*Kontio*/transcript.en.md"))
+    check("translation files next to the originals", bool(_en) and (_en[0].parent / "notes.en.md").exists())
     _m4a = list((D / "notes").glob("*Kontio*/audio.m4a"))
     check("audio.m4a written and small", bool(_m4a) and _m4a[0].stat().st_size < (_m4a[0].parent / "audio.wav").stat().st_size / 3,
           [(f, f.stat().st_size) for f in _m4a])
