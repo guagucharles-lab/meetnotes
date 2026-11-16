@@ -96,7 +96,8 @@ def test_calendar_cache_current_and_upcoming(tmp_path):
         fetches.append(url)
         return ICS
 
-    c = cal.Calendar(["https://example.com/a.ics"], tmp_path / "cal.json", fetch=fetch, clock=lambda: t["now"])
+    c = cal.Calendar(["https://example.com/a.ics"], tmp_path / "cal.json", fetch=fetch, clock=lambda: t["now"],
+                     now=lambda: datetime(2026, 11, 14, 9, 0))  # the test calendar is mid-November 2026
     assert c.events == []
     # freeze "now" inside the ICS range by asking with explicit times
     assert c.refresh(force=True) is True and len(fetches) == 1

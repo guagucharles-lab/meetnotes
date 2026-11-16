@@ -140,13 +140,14 @@ class Calendar:
     """Keeps a cache of upcoming events from the configured feeds."""
 
     def __init__(self, urls: list[str], cache_path: Path, days_ahead: int = 14,
-                 refresh_seconds: int = 900, fetch=fetch_ics, clock=time.monotonic) -> None:
+                 refresh_seconds: int = 900, fetch=fetch_ics, clock=time.monotonic, now=datetime.now) -> None:
         self.urls = [u.strip() for u in urls if u.strip()]
         self.cache_path = cache_path
         self.days_ahead = days_ahead
         self.refresh_seconds = refresh_seconds
         self._fetch = fetch
         self._clock = clock
+        self._now = now
         self.events: list[Event] = []
         self.error = ""
         self.fetched_at = ""
@@ -182,8 +183,8 @@ class Calendar:
         if not force and self._clock() - self._last < self.refresh_seconds:
             return False
         self._last = self._clock()
-        start = datetime.now() - timedelta(days=1)
-        end = datetime.now() + timedelta(days=self.days_ahead)
+        start = self._now() - timedelta(days=1)
+        end = self._now() + timedelta(days=self.days_ahead)
         events, errors = [], []
         for i, url in enumerate(self.urls):
             try:

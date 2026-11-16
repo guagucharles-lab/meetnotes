@@ -694,7 +694,7 @@ async function viewMeeting(main, id) {
     ${m.has_audio ? `<div class="audio-row card">
       <audio id="rec-audio" controls preload="none" src="/api/meetings/${encodeURIComponent(id)}/audio.m4a?t=${encodeURIComponent(TOKEN)}"></audio>
       ${STATUS && STATUS.device === "phone"
-        ? `<a class="btn small" href="/api/meetings/${encodeURIComponent(id)}/audio.m4a?t=${encodeURIComponent(TOKEN)}&download=1" download>Lataa ääni</a>`
+        ? (window.MeetnotesAndroid ? "" : `<a class="btn small" href="/api/meetings/${encodeURIComponent(id)}/audio.m4a?t=${encodeURIComponent(TOKEN)}&download=1" download>Lataa ääni</a>`)
         : `<button type="button" class="btn small" id="reveal">Näytä tiedosto</button>`}
       <span class="hint">Koko kokouksen ääni. Klikkaa tekstin aikaleimaa, niin ääni alkaa siitä kohdasta.</span></div>` : ""}
     ${chapters.length ? `<ul class="chapters" aria-label="Aiheet">${chapters.map((c) => `<li><button type="button" data-seek="${esc(c.start)}"><span class="ts">${esc(c.start)}</span><span>${esc(c.title)}</span></button></li>`).join("")}</ul>` : ""}

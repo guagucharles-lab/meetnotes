@@ -14,7 +14,7 @@ from meetnotes import __version__, service, update
 def manifest(version="9.9.9", sha="", url="https://example.com/meetnotes-9.9.9-py3-none-any.whl"):
     return {"version": version, "notes": "Uusi avustaja", "published": "2026-11-20",
             "wheel": {"url": url, "sha256": sha or "0" * 64},
-            "android": {"version_code": 2, "version": "0.3", "url": "https://example.com/Meetnotes.apk"}}
+            "android": {"version_code": 99, "version": "0.3", "url": "https://example.com/Meetnotes.apk"}}
 
 
 def test_version_tuple():
