@@ -136,6 +136,17 @@ function markdown(md) {
   }
   return out.join("\n");
 }
+// The transcript as plain text to paste anywhere: "[00:01:02] Minä: …".
+function plainTranscript(text) {
+  const out = [];
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const m = line.match(/^\[(\d\d:\d\d:\d\d)\]\s*(?:(Me|Others):)?\s*(.*)$/);
+    if (!m) continue;
+    const who = m[2] === "Me" ? "Minä: " : m[2] === "Others" ? "Muut: " : "";
+    out.push(`[${m[1]}] ${who}${m[3]}`);
+  }
+  return out.join("\n");
+}
 function transcriptHtml(text) {
   const rows = [];
   for (const line of String(text || "").split(/\r?\n/)) {
@@ -710,7 +721,11 @@ async function viewMeeting(main, id) {
     <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${k === first}">${l}</button>`).join("")}</div>
     <article class="card md" id="content"></article>
     <div class="actions" id="del-row" style="margin-top:20px"><button class="btn ghost small" id="del">Poista kokous</button></div>`;
+  let curTab = first;
+  const COPY_LABEL = { notes: "Kopioi muistiinpanot", transcript: "Kopioi teksti", mine: "Kopioi omat", live: "Kopioi väliaikaiset" };
   const show = (k) => {
+    curTab = k;
+    if ($("#copy")) { $("#copy").textContent = COPY_LABEL[k] || "Kopioi"; $("#copy").hidden = k === "video"; }
     main.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === k)));
     // The topics are already shown as clickable chapters above: don't repeat them in the notes.
     const notesBody = (notesText() || "").replace(/^# .*\n/, "").replace(/^## (Aiheet|Topics|Ämnen)\n[\s\S]*?(?=^## |(?![\s\S]))/m, chapters.length ? "" : "$&");
@@ -773,7 +788,10 @@ async function viewMeeting(main, id) {
     if (row) { row.closest(".tline").scrollIntoView({ block: "center" }); row.closest(".tline").style.background = "var(--accent-soft)"; }
   }));
   $("#copy").onclick = async () => {
-    const text = hasNotes ? notesText() : transcriptText();
+    const text = curTab === "transcript" ? plainTranscript(transcriptText())
+      : curTab === "mine" ? m.my_notes
+      : curTab === "live" ? m.live_notes
+      : hasNotes ? notesText() : plainTranscript(transcriptText());
     try { await navigator.clipboard.writeText(text); toast("Kopioitu leikepöydälle"); }
     catch { const r = document.createRange(); r.selectNodeContents($("#content")); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Valitse ja kopioi (Ctrl+C)"); }
   };

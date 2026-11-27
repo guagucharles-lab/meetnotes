@@ -268,7 +268,12 @@ const {{ chromium }} = require("playwright");
   await p.click("[data-tab=video]");
   await p.waitForFunction(() => {{ const v = document.querySelector("video.screen"); return v && v.readyState >= 1 && v.duration > 0; }}, null, {{ timeout: 20000 }});
   out.video = await p.$eval("video.screen", (v) => v.duration);
+  out.copyHiddenOnVideo = await p.$eval("#copy", (b) => b.hidden);
+  await p.click("[data-tab=notes]");
   await p.click("#copy"); out.clip = (await p.evaluate(() => navigator.clipboard.readText())).slice(0, 20);
+  await p.click("[data-tab=transcript]");
+  out.copyLabel = await p.textContent("#copy");
+  await p.click("#copy"); out.clipText = (await p.evaluate(() => navigator.clipboard.readText())).slice(0, 200);
   await p.screenshot({{ path: "{D}/shots/meeting.png", fullPage: true }});
   // delete the manual (safe word) meeting with the in-page confirmation
   await p.goto("http://127.0.0.1:{APP}/#/meetings"); await p.waitForSelector(".item");
@@ -330,6 +335,9 @@ const {{ chromium }} = require("playwright");
     check("audio.m4a written and small", bool(_m4a) and _m4a[0].stat().st_size < (_m4a[0].parent / "audio.wav").stat().st_size / 3,
           [(f, f.stat().st_size) for f in _m4a])
     check("copy puts notes on the clipboard", (ui.get("clip") or "").startswith("# Kontio"), ui.get("clip"))
+    check("copy on the transcript tab copies the transcript", ui.get("copyLabel") == "Kopioi teksti"
+          and re.match(r"\[00:00:\d\d\] (Minä|Muut): ", ui.get("clipText") or "") is not None, (ui.get("copyLabel"), ui.get("clipText")))
+    check("no copy button on the video tab", ui.get("copyHiddenOnVideo") is True)
     check("delete with in-page confirmation", ui.get("deleted") == 1, ui.get("deleted"))
     check("tasks from notes listed", ui.get("tasks") and "Lähetä raportti" in ui["tasks"], ui.get("tasks"))
     check("task done persists after reload", (ui.get("doneAfterReload") or 0) >= 1)
