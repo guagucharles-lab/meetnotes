@@ -56,7 +56,7 @@ class Config:
     mic_gate: bool = False             # also mute the mic while only others talk (for laptop speakers)
 
     # Notes (Claude).
-    claude_model: str = "claude-opus-5-5"
+    claude_model: str = "claude-fable-5-2"
     effort: str = "medium"             # low | medium | high | xhigh | max
     live_notes: bool = False           # write running notes during the meeting
     live_notes_interval: int = 300     # seconds between live-note refreshes
@@ -89,7 +89,8 @@ class Config:
     assistant_style: str = "balanced"  # quiet = answer questions, flag decisions | balanced | active
     translate_to: str = ""             # e.g. "en": translate every meeting (transcript + notes) afterwards
     translate_live: bool = False       # also show live translated captions during the meeting
-    assistant_model: str = "claude-opus-5-5"  # e.g. claude-sonnet-5-5 for cheaper live updates
+    assistant_model: str = "claude-fable-5-2"  # e.g. claude-sonnet-5-5 for cheaper live updates
+    models_version: int = 2            # bumped when the default models change (see load())
     assistant_effort: str = "low"      # effort for live updates; preparation always uses "high"
 
     # Screen recording (video of your screen with the meeting audio).
@@ -121,6 +122,13 @@ def load(path: Path | None = None) -> Config:
     for key, value in data.items():
         if key in known:
             setattr(cfg, key, value)
+    if int(data.get("models_version", 1)) < 2:
+        # Settings saved before Claude Fable 5.2 became the default still name
+        # the old default; move those (and only those) to the new one.
+        for key in ("claude_model", "assistant_model"):
+            if getattr(cfg, key) == "claude-opus-5-5":
+                setattr(cfg, key, "claude-fable-5-2")
+        cfg.models_version = 2
     return cfg
 
 

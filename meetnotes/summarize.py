@@ -159,7 +159,7 @@ def _client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=key, **opts) if key else anthropic.Anthropic(**opts)
 
 
-def summarize_transcript(transcript: str, meta: MeetingMeta, model: str = "claude-opus-5-5",
+def summarize_transcript(transcript: str, meta: MeetingMeta, model: str = "claude-fable-5-2",
                          effort: str = "medium", extra_instructions: str = "",
                          client: anthropic.Anthropic | None = None,
                          notes_language: str = "", context: str = "") -> MeetingNotes:
@@ -177,7 +177,7 @@ def summarize_transcript(transcript: str, meta: MeetingMeta, model: str = "claud
 
     with client.beta.messages.stream(
         model=model,
-        max_tokens=16000,
+        max_tokens=32000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user}],
         output_config={"effort": effort, "format": {"type": "json_schema", "schema": NOTES_SCHEMA}},
@@ -196,13 +196,13 @@ def summarize_transcript(transcript: str, meta: MeetingMeta, model: str = "claud
     return MeetingNotes.model_validate(json.loads(text))
 
 
-def live_notes(transcript_so_far: str, meta: MeetingMeta, model: str = "claude-opus-5-5",
+def live_notes(transcript_so_far: str, meta: MeetingMeta, model: str = "claude-fable-5-2",
                client: anthropic.Anthropic | None = None) -> str:
     client = client or _client()
     user = f"{meta.describe()}\n\nTranscript so far:\n<transcript>\n{transcript_so_far}\n</transcript>"
     with client.beta.messages.stream(
         model=model,
-        max_tokens=4000,
+        max_tokens=16000,
         system=LIVE_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user}],
         output_config={"effort": "low"},
@@ -307,7 +307,7 @@ answer the question, say so plainly. Lines labelled "Me:" are the user.
 Answer in the language of the question, briefly."""
 
 
-def ask(question: str, documents: list[tuple[str, str]], model: str = "claude-opus-5-5",
+def ask(question: str, documents: list[tuple[str, str]], model: str = "claude-fable-5-2",
         client: anthropic.Anthropic | None = None, write=None) -> str:
     """Answer a question across past meetings. `documents` is [(name, text)].
     Streams the answer through `write` (e.g. sys.stdout.write) as it arrives."""
@@ -317,7 +317,7 @@ def ask(question: str, documents: list[tuple[str, str]], model: str = "claude-op
     parts: list[str] = []
     with client.beta.messages.stream(
         model=model,
-        max_tokens=8000,
+        max_tokens=32000,
         system=ASK_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": content}],
         output_config={"effort": "medium"},

@@ -261,7 +261,7 @@ def render_prep(brief: PrepBrief) -> str:
     return "\n".join(lines)
 
 
-def prepare(root: Path, b: Briefing, model: str = "claude-opus-5-5", client=None) -> str:
+def prepare(root: Path, b: Briefing, model: str = "claude-fable-5-2", client=None) -> str:
     """Write (or rewrite) the brief. Returns Markdown and stores it on the briefing."""
     client = client or _client()
     context = briefing_context(root, b)
@@ -288,14 +288,14 @@ name which meeting and date a fact comes from, and say plainly when the
 material does not answer. Short, direct answers in the user's language."""
 
 
-def chat(root: Path, b: Briefing, question: str, model: str = "claude-opus-5-5", client=None) -> str:
+def chat(root: Path, b: Briefing, question: str, model: str = "claude-fable-5-2", client=None) -> str:
     """Ask about the meeting before it happens. History lives on the briefing."""
     client = client or _client()
     context = briefing_context(root, b)
     history = [{"role": m["role"], "content": m["text"]} for m in b.chat[-20:]]
     system = [{"type": "text", "text": CHAT_SYSTEM + "\n\n" + context, "cache_control": {"type": "ephemeral"}}]
     with client.beta.messages.stream(
-        model=model, max_tokens=4000, system=system,
+        model=model, max_tokens=16000, system=system,
         messages=history + [{"role": "user", "content": question}],
         output_config={"effort": "medium"},
         betas=[FALLBACK_BETA], fallbacks="default",
@@ -382,7 +382,7 @@ class LiveUpdate(BaseModel):
 
 class LiveAssistant:
     def __init__(self, context: str, title: str, style: str = "balanced", interval: int = 45,
-                 model: str = "claude-opus-5-5", effort: str = "low", client=None,
+                 model: str = "claude-fable-5-2", effort: str = "low", client=None,
                  clock=time.monotonic, briefing_title: str = "") -> None:
         self.context = context
         self.title = title
@@ -491,7 +491,7 @@ class LiveAssistant:
                    + ("\n\n" + self.context if self.context else ""),
                    "cache_control": {"type": "ephemeral"}}]
         with client.beta.messages.stream(
-            model=self.model, max_tokens=4000, system=system, messages=list(self.messages),
+            model=self.model, max_tokens=16000, system=system, messages=list(self.messages),
             output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": LIVE_SCHEMA}},
             cache_control={"type": "ephemeral"},   # the growing, append-only history
             betas=[FALLBACK_BETA], fallbacks="default",

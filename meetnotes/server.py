@@ -53,7 +53,7 @@ EDITABLE = {
     "ignore_titles": list, "vocabulary": list, "idle_stop_minutes": int, "phone_access": bool,
     "tray_icon": bool, "extra_instructions": str,
     "record_screen": bool, "screen_monitor": int, "screen_fps": int, "transcribe_mode": str,
-    "assistant_live": bool, "assistant_interval": int, "assistant_style": str, "assistant_model": str,
+    "assistant_live": bool, "assistant_interval": int, "assistant_style": str, "assistant_model": str, "claude_model": str,
     "translate_to": str, "translate_live": bool,
     "calendar_urls": list, "notes_template": str, "watch_words": list, "webhook_url": str,
     "update_url": str, "update_check": bool,
@@ -66,7 +66,8 @@ CHOICES = {
     "transcribe_mode": {"mixed", "separate"},
     "assistant_interval": {30, 45, 60, 90, 120},
     "assistant_style": {"quiet", "balanced", "active"},
-    "assistant_model": {"claude-opus-5-5", "claude-sonnet-5-5"},
+    "assistant_model": {"claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5"},
+    "claude_model": {"claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5"},
     "translate_to": {"", *LANGUAGES},
 }
 

@@ -5,7 +5,7 @@ microphone), transcribes it locally with Whisper, and asks Claude to write the
 notes. Nothing joins the call, so other participants never see it.
 """
 
-__version__ = "0.2.7"
+__version__ = "0.2.8"
 
 import os as _os
 import sys as _sys

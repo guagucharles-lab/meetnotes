@@ -494,6 +494,8 @@ async function loadLive() {
 }
 
 // ---------------------------------------------------------------- translation
+const CLAUDE_MODELS = [["claude-fable-5-2", "Claude Fable 5.2, kyvykkäin"], ["claude-opus-5-5", "Claude Opus 5.5, puolet halvempi"],
+  ["claude-sonnet-5-5", "Claude Sonnet 5.5, nopein ja halvin"]];
 const TR_LANGS = [["en", "englanti"], ["fi", "suomi"], ["sv", "ruotsi"], ["de", "saksa"], ["fr", "ranska"], ["es", "espanja"],
   ["et", "viro"], ["ru", "venäjä"], ["uk", "ukraina"], ["it", "italia"], ["nl", "hollanti"], ["pl", "puola"], ["pt", "portugali"],
   ["no", "norja"], ["da", "tanska"], ["ja", "japani"], ["zh", "kiina"], ["ar", "arabia"], ["vi", "vietnam"]];
@@ -1050,6 +1052,12 @@ async function viewSettings(main) {
       </section>
 
       <section class="card">
+        <h2>Claude-malli</h2>
+        <label class="field"><span>Muistiinpanot, valmistelu, käännökset ja kysymykset</span><select id="claude_model">${opts(CLAUDE_MODELS, s.claude_model)}</select>
+          <span class="hint">Fable 5.2 on Anthropicin kyvykkäin malli ja maksaa noin kaksinkertaisesti Opus 5.5:een verrattuna: tunnin kokouksen muistiinpanot noin 0,2–0,4 €. Jos tilisi ei salli Fable 5.2:ta, vaihda tähän Opus 5.5.</span></label>
+      </section>
+
+      <section class="card">
         <h2>Claude API -avain</h2>
         <p class="muted small">Tarvitaan muistiinpanojen kirjoittamiseen. Tallennetaan Windowsin tunnistetietojen hallintaan, ei tiedostoon.</p>
         <label class="field"><span>${s.has_api_key ? "Avain on tallennettu. Vaihda uuteen:" : "API-avain"}</span>
@@ -1092,20 +1100,20 @@ async function viewSettings(main) {
         <p class="muted small">Kääntää kokouksen tekstin ja muistiinpanot toiselle kielelle. Alkuperäiset säilyvät, ja kokouksen sivulla voi vaihtaa kielten välillä. Yksittäisen kokouksen voi kääntää myös sen omalta sivulta.</p>
         <label class="field"><span>Käännä jokainen kokous automaattisesti kielelle</span><select id="translate_to">
           <option value="" ${s.translate_to ? "" : "selected"}>Ei automaattista käännöstä</option>${trOptions(s.translate_to)}</select>
-          <span class="hint">Käännös tehdään muistiinpanojen jälkeen. Tunnin kokous maksaa noin 0,3–0,5 €.</span></label>
+          <span class="hint">Käännös tehdään muistiinpanojen jälkeen. Tunnin kokous maksaa noin 0,5–1 € Fable 5.2:lla.</span></label>
         ${toggle("translate_live", "Käännös myös kokouksen aikana", "Koti-sivulla näkyy puhe käännettynä muutaman sekunnin viiveellä. Voit kytkeä sen myös kesken kokouksen.", s.translate_live)}
       </section>
 
       <section class="card">
         <h2>Avustaja kokouksen aikana</h2>
-        <p class="muted small">Seuraa keskustelua Clauden avulla ja ehdottaa, mitä ottaa esiin. Jokainen päivitys on yksi API-kutsu, joten tunnin kokous maksaa suunnilleen 0,5–1 €.</p>
+        <p class="muted small">Seuraa keskustelua Clauden avulla ja ehdottaa, mitä ottaa esiin. Jokainen päivitys on yksi API-kutsu, joten tunnin kokous maksaa Fable 5.2:lla suunnilleen 1–2 € (Sonnet 5.5:llä noin viidesosan).</p>
         ${toggle("assistant_live", "Avustaja päällä kokouksissa", "Käynnistyy itse jokaisessa kokouksessa. Voit kytkeä sen myös kokouksen aikana kotisivulta.", s.assistant_live)}
         <div class="grid-2">
           <label class="field"><span>Tyyli</span><select id="assistant_style">${opts([["quiet", "Hiljainen: vastaa ja merkitsee päätökset"], ["balanced", "Tasapainoinen, suositus"], ["active", "Aktiivinen: paljon ehdotuksia"]], s.assistant_style)}</select></label>
           <label class="field"><span>Päivitysväli</span><select id="assistant_interval">${opts([["30", "30 s"], ["45", "45 s, suositus"], ["60", "60 s"], ["90", "90 s"], ["120", "2 min"]], String(s.assistant_interval))}</select></label>
         </div>
-        <label class="field"><span>Malli kokouksen aikana</span><select id="assistant_model">${opts([["claude-opus-5-5", "Claude Opus 5.5, tarkin"], ["claude-sonnet-5-5", "Claude Sonnet 5.5, nopeampi ja halvempi"]], s.assistant_model)}</select>
-          <span class="hint">Valmistelu ja muistiinpanot käyttävät aina Opus 5.5:tä.</span></label>
+        <label class="field"><span>Malli kokouksen aikana</span><select id="assistant_model">${opts(CLAUDE_MODELS, s.assistant_model)}</select>
+          <span class="hint">Avustaja ja käännös kokouksen aikana. Muistiinpanojen malli valitaan kohdasta Claude-malli.</span></label>
       </section>
 
       <section class="card">
@@ -1282,7 +1290,7 @@ async function viewSettings(main) {
       keep_audio: chk("keep_audio"), ignore_titles: val("ignore_titles"),
       record_screen: chk("record_screen"), screen_monitor: Number(val("screen_monitor")), screen_fps: Number(val("screen_fps")),
       assistant_live: chk("assistant_live"), assistant_style: val("assistant_style"), assistant_interval: Number(val("assistant_interval")),
-      assistant_model: val("assistant_model"),
+      assistant_model: val("assistant_model"), claude_model: val("claude_model"),
       translate_to: val("translate_to"), translate_live: chk("translate_live"),
       calendar_urls: val("calendar_urls"), notes_template: val("notes_template"), watch_words: val("watch_words"), webhook_url: val("webhook_url"),
     };
