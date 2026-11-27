@@ -56,7 +56,7 @@ EDITABLE = {
     "assistant_live": bool, "assistant_interval": int, "assistant_style": str, "assistant_model": str, "claude_model": str,
     "translate_to": str, "translate_live": bool,
     "calendar_urls": list, "notes_template": str, "watch_words": list, "webhook_url": str,
-    "update_url": str, "update_check": bool,
+    "update_check": bool,
 }
 CHOICES = {
     "whisper_model": {"tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"},
@@ -124,6 +124,7 @@ class App:
         self._pair_expires = 0.0
         self._pair_fails = 0
         self._pair_locked_until = 0.0
+        self._pair_shown = -1e9
         self._pair_lock = threading.Lock()
         self.summarizing: set[str] = set()
         self._audio_lock = threading.Lock()
@@ -205,9 +206,14 @@ class App:
         return f"meetnotes://pair?u={quote(server, safe='')}&t={self.token}&fp={self.cert_fp}"
 
     # -- pairing code for the Android app ------------------------------------
-    # A short code you type into the app, instead of the long token. It lasts
-    # 10 minutes, works once, and five wrong guesses lock it for a minute and
-    # replace it.
+    # A short code you type into the app, instead of the long token. Pairing
+    # is open only while the code is on the computer's screen (the settings
+    # page asks for it every 30 s); a code lasts 10 minutes and works once.
+    # Five wrong guesses close pairing for a minute and throw the code away,
+    # so someone else on the same Wi-Fi gets five guesses out of a million per
+    # code you look at, not an endless stream of fresh codes.
+
+    PAIR_SHOWN_S = 90
 
     def _new_code(self) -> None:
         self._pair_code = f"{secrets.randbelow(10 ** 6):06d}"
@@ -216,9 +222,11 @@ class App:
 
     def pair_code(self) -> tuple[str, int]:
         with self._pair_lock:
-            if not self._pair_code or time.monotonic() >= self._pair_expires:
+            now = time.monotonic()
+            if not self._pair_code or now >= self._pair_expires:
                 self._new_code()
-            return self._pair_code, int(self._pair_expires - time.monotonic())
+            self._pair_shown = now
+            return self._pair_code, int(self._pair_expires - now)
 
     def claim(self, code: str) -> dict:
         with self._pair_lock:
@@ -226,15 +234,32 @@ class App:
             if now < self._pair_locked_until:
                 raise PermissionError("too many attempts, wait a minute")
             code = "".join(ch for ch in str(code) if ch.isdigit())
-            if not self._pair_code or now >= self._pair_expires or \
-                    not hmac.compare_digest(code, self._pair_code):
+            open_now = self._pair_code and now < self._pair_expires and now - self._pair_shown <= self.PAIR_SHOWN_S
+            if not open_now or not hmac.compare_digest(code, self._pair_code):
                 self._pair_fails += 1
                 if self._pair_fails >= 5:
                     self._pair_locked_until = now + 60
-                    self._new_code()
-                raise PermissionError("wrong or expired code")
+                    self._pair_code = ""  # closed until the computer shows a new code
+                    self._pair_fails = 0
+                raise PermissionError("wrong or expired code" if open_now else
+                                      "open Settings on the computer to show a pairing code")
             self._new_code()  # one use only
             return {"token": self.token, "fingerprint": self.cert_fp, "app": "meetnotes"}
+
+    def forget_devices(self) -> str:
+        """A lost phone keeps working until the token changes: make a new one.
+        Every phone has to pair again; this computer's window gets the new one."""
+        from .config import state_dir as _sd
+        token = secrets.token_urlsafe(32)
+        path = _sd() / "app_token"
+        path.write_text(token)
+        if os.name == "posix":
+            os.chmod(path, 0o600)
+        with self._pair_lock:
+            self.token = token
+            self._pair_code = ""
+        log.info("All paired devices forgotten (new access token).")
+        return token
 
     # -- API -----------------------------------------------------------------
 
@@ -537,6 +562,11 @@ class App:
             subprocess.Popen(["xdg-open", str(folder)])
 
 
+# Settings a paired phone may not change (see /api/settings). The update
+# address isn't editable through the app at all, only in the config file.
+COMPUTER_ONLY = {"webhook_url", "calendar_urls", "phone_access", "update_check"}
+
+
 def _speech_state() -> dict:
     from .whisperproc import state
     st = state()
@@ -818,6 +848,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _api_post(self, path: str) -> None:
         app = self.app
+        if path == "/api/pair/forget":
+            if self.lan:
+                raise ValueError("only on the computer")
+            return self._json(200, {"token": app.forget_devices()})
         m = re.fullmatch(r"/api/phone/([^/]+)/chunk", path)
         if m:  # raw audio bytes, not JSON
             from .phone import MAX_CHUNK
@@ -837,6 +871,11 @@ class Handler(BaseHTTPRequestHandler):
             service.pause() if data.get("on") else service.resume()
             return self._json(200, app.status())
         if path == "/api/settings":
+            if self.lan:
+                # Where notes are sent or calendars read from is set on the
+                # computer: a stolen phone must not be able to redirect them.
+                for key in COMPUTER_ONLY:
+                    data.pop(key, None)
             errors = app.update_settings(data)
             return self._json(200 if not errors else 400, {"errors": errors, "settings": app.settings()})
         if path == "/api/ask":

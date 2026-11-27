@@ -14,6 +14,7 @@ the setup that works so the next meeting starts with it.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -55,6 +56,9 @@ def set_state(**kw) -> None:
 def state() -> dict:
     with _STATE_LOCK:
         return dict(STATE)
+
+
+HELLO = b"meetnotes-worker:"
 
 
 class WorkerFailed(RuntimeError):
@@ -302,12 +306,15 @@ class IsolatedTranscriber:
                         raise WorkerFailed("worker did not start") from None
                     continue
                 conn.settimeout(10)
+                # Authenticate with raw bytes before anything is unpickled:
+                # another program on this computer could connect to the port
+                # too, and unpickling its data would run its code.
                 try:
-                    hello = _recv(conn)
-                except (OSError, EOFError, pickle.UnpicklingError, struct.error):
+                    hello = _recv_exact(conn, len(HELLO) + len(token))
+                except (OSError, EOFError):
                     conn.close()
                     continue
-                if hello != ("hello", token):
+                if not hmac.compare_digest(hello, HELLO + token.encode()):
                     conn.close()
                     continue
                 conn.settimeout(1.0)
@@ -443,7 +450,7 @@ def _worker(port: int, token: str) -> int:
     faulthandler.enable(file=out)
     logging.basicConfig(level=logging.INFO, stream=out, format="%(asctime)s %(message)s")
     sock = socket.create_connection(("127.0.0.1", port))
-    _send(sock, ("hello", token))
+    sock.sendall(HELLO + token.encode())
     model = None
     fake = os.environ.get("MEETNOTES_FAKE_WHISPER")  # tests only
     idle = float(os.environ.get("MEETNOTES_WORKER_IDLE") or IDLE_EXIT_S)

@@ -1046,6 +1046,8 @@ async function viewSettings(main) {
         <p class="muted small">Ohjaa nauhoitusta ja lue muistiinpanoja puhelimella, kun se on samassa Wi-Fi-verkossa.</p>
         ${toggle("phone_access", "Puhelinyhteys", "Salattu yhteys. Vain koodilla yhdistetyt laitteet pääsevät sisään.", s.phone_access)}
         <div id="pair"></div>
+        <div class="actions" id="forget-row" style="margin-top:14px"><button type="button" class="btn ghost small" id="forget">Poista kaikki yhdistetyt puhelimet</button></div>
+        <p class="hint">Jos puhelin katoaa, paina tätä: kaikki puhelimet menettävät pääsyn, ja ne pitää yhdistää uudelleen koodilla.</p>
       </section>` : ""}
 
       ${window.MeetnotesAndroid ? `<section class="card">
@@ -1099,7 +1101,7 @@ async function viewSettings(main) {
       <section class="card">
         <h2>Kalenteri</h2>
         <p class="muted small">Liitä kalenterisi ICS-osoite, niin tulevat kokoukset näkyvät sovelluksessa, kokoukset nimetään kalenterin mukaan ja valmistelun saa yhdellä painalluksella. Vain luku, mitään ei kirjoiteta kalenteriin.</p>
-        <label class="field"><span>ICS-osoitteet, yksi per rivi</span><textarea id="calendar_urls" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">${esc((s.calendar_urls || []).join("\n"))}</textarea>
+        <label class="field"><span>ICS-osoitteet, yksi per rivi</span><textarea id="calendar_urls" ${onComputer ? "" : "disabled"} placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">${esc((s.calendar_urls || []).join("\n"))}</textarea>
           <span class="hint">Google: Kalenterin asetukset → Integroi kalenteri → Salainen osoite iCal-muodossa. Outlook: Asetukset → Jaetut kalenterit → Julkaise kalenteri → ICS.</span></label>
       </section>
 
@@ -1109,8 +1111,8 @@ async function viewSettings(main) {
           <span class="hint">Automaattinen tunnistaa kokouksen tyypin. Myyntikokoukseen tulee esimerkiksi osiot Asiakkaan tarpeet, Vastaväitteet ja Kaupan tilanne. Tyypin voi vaihtaa myös kokouksen aikana.</span></label>
         <label class="field"><span>Avainsanat, jotka merkitään heti</span><input type="text" id="watch_words" value="${esc((s.watch_words || []).join(", "))}" placeholder="kilpailija, alennus, irtisanominen">
           <span class="hint">Kun joku sanoo näistä jonkin, se näkyy heti kotisivun syötteessä. Ei maksa mitään.</span></label>
-        <label class="field"><span>Webhook-osoite</span><input type="text" id="webhook_url" value="${esc(s.webhook_url || "")}" placeholder="https://hooks.zapier.com/…">
-          <span class="hint">Muistiinpanot lähetetään JSON-muodossa tähän osoitteeseen jokaisen kokouksen jälkeen. Sopii Zapieriin, n8n:ään tai omaan skriptiin, joka vie ne esimerkiksi CRM:ään tai Slackiin.</span></label>
+        <label class="field"><span>Webhook-osoite</span><input type="text" id="webhook_url" ${onComputer ? "" : "disabled"} value="${esc(s.webhook_url || "")}" placeholder="https://hooks.zapier.com/…">
+          <span class="hint">${onComputer ? "" : "Muutettavissa vain tietokoneella. "}Muistiinpanot lähetetään JSON-muodossa tähän osoitteeseen jokaisen kokouksen jälkeen. Sopii Zapieriin, n8n:ään tai omaan skriptiin, joka vie ne esimerkiksi CRM:ään tai Slackiin.</span></label>
       </section>
 
       <section class="card">
@@ -1208,6 +1210,18 @@ async function viewSettings(main) {
     if (!document.getElementById("pair")) return clearInterval(viewSettings.pairTimer);
     if (pairTab === "android" && $("#phone_access")?.checked && !document.hidden) loadPair();
   }, 30000);
+  if ($("#forget")) $("#forget").onclick = () => {
+    $("#forget-row").innerHTML = `<span class="small">Kaikki yhdistetyt puhelimet menettävät pääsyn. Jatketaanko?</span>
+      <button type="button" class="btn danger small" id="forget-yes">Poista</button><button type="button" class="btn ghost small" id="forget-no">Peruuta</button>`;
+    $("#forget-no").onclick = () => route();
+    $("#forget-yes").onclick = async () => {
+      try {
+        const r = await api("/api/pair/forget", {});
+        TOKEN = r.token; store.set("mn_token", r.token);
+        toast("Puhelimet poistettu. Yhdistä ne uudelleen koodilla."); route();
+      } catch (e) { toast("Ei onnistunut: " + e.message); }
+    };
+  };
   if ($("#phone_access")) {
     loadPair();
     $("#phone_access").onchange = async (e) => {

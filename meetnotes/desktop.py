@@ -45,6 +45,8 @@ def ensure_service(cfg, config_path: Path | None = None, timeout: float = 20.0) 
 
 
 def _api(port: int, token: str, path: str, data: dict) -> dict:
+    from .server import app_token
+    token = app_token()  # read each time: "forget devices" replaces it
     req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=json.dumps(data).encode(),
                                  headers={"Content-Type": "application/json",
                                           "X-Meetnotes-Token": token}, method="POST")
@@ -53,6 +55,8 @@ def _api(port: int, token: str, path: str, data: dict) -> dict:
 
 
 def _status(port: int, token: str) -> dict:
+    from .server import app_token
+    token = app_token()  # read each time: "forget devices" replaces it
     req = urllib.request.Request(f"http://127.0.0.1:{port}/api/status",
                                  headers={"X-Meetnotes-Token": token})
     with urllib.request.urlopen(req, timeout=3) as r:

@@ -159,7 +159,7 @@ def apply(cfg_url: str = "", fetch=None, downloader=None, installer=None) -> dic
         manifest = fetch(update_url(cfg_url))
         wheel = manifest.get("wheel") or {}
         url, digest = str(wheel.get("url", "")), str(wheel.get("sha256", "")).lower()
-        if not url or len(digest) != 64:
+        if not url.startswith("https://") or len(digest) != 64:
             raise ValueError("update file has no wheel")
         if version_tuple(manifest["version"]) <= version_tuple(__version__):
             raise ValueError(f"already on {__version__}")

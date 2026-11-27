@@ -281,5 +281,45 @@ def test_android_pairing_code(app, monkeypatch):
         call(app, "POST", "/api/pair/claim", {"code": "999999" if new_code != "999999" else "888888"}, **lan)
     status, res = call(app, "POST", "/api/pair/claim", {"code": new_code}, **lan)
     assert status == 429 and "attempts" in res["error"]
+    assert call(app, "POST", "/api/pair/claim", {"code": new_code}, **lan)[0] in (403, 429)  # thrown away
+    app._pair_locked_until = 0
     assert call(app, "GET", "/api/pair")[1]["code"] != new_code
+
+    # Pairing is open only while the code is on the computer's screen
+    code = call(app, "GET", "/api/pair")[1]["code"]
+    app._pair_shown -= app.PAIR_SHOWN_S + 1   # settings page closed a while ago
+    status, res = call(app, "POST", "/api/pair/claim", {"code": code}, **lan)
+    assert status == 403 and "open Settings" in res["error"]
+    app.stop_lan()
+
+
+def test_forget_devices_replaces_the_token(app):
+    app.start_lan(port=0)
+    old = app.token
+    assert call(app, "GET", "/api/status", lan=True, host="192.168.1.20", token=old)[0] == 200
+    assert call(app, "POST", "/api/pair/forget", {}, lan=True, host="192.168.1.20", token=old)[0] == 400  # not from a phone
+    status, res = call(app, "POST", "/api/pair/forget", {})
+    assert status == 200 and res["token"] != old and len(res["token"]) >= 32
+    assert call(app, "GET", "/api/status", lan=True, host="192.168.1.20", token=old)[0] == 401   # the lost phone is out
+    assert call(app, "GET", "/api/status", token=res["token"])[0] == 200
+    from meetnotes.server import app_token
+    assert app_token() == res["token"]   # survives a restart; the desktop tray reads it from here
+    app.stop_lan()
+
+
+def test_phone_cannot_redirect_notes_or_updates(app):
+    app.start_lan(port=0)
+    lan = dict(lan=True, host="192.168.1.20")
+    status, res = call(app, "POST", "/api/settings", {"webhook_url": "https://evil.example/hook",
+                                                      "calendar_urls": "https://evil.example/c.ics",
+                                                      "update_url": "https://evil.example/u.json",
+                                                      "watch_words": "hinta"}, **lan)
+    assert status in (200, 400), res
+    assert "webhook_url" not in res.get("errors", {}) and "calendar_urls" not in res.get("errors", {})
+    assert app.cfg.webhook_url == "" and app.cfg.calendar_urls == [] and app.cfg.update_url == ""
+    assert app.cfg.watch_words == ["hinta"]               # ordinary settings still work from the phone
+    call(app, "POST", "/api/settings", {"update_url": "https://evil.example/u.json"})
+    assert app.cfg.update_url == ""                       # not editable through the app at all
+    call(app, "POST", "/api/settings", {"webhook_url": "https://hooks.example/x"})
+    assert app.cfg.webhook_url == "https://hooks.example/x"   # the computer can
     app.stop_lan()

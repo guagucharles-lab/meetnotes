@@ -135,3 +135,29 @@ def test_stale_summarizing_shows_as_interrupted(tmp_path):
     assert app._shown_status("x", "summarizing") == "interrupted"  # the process that wrote it is gone
     app.summarizing.add("x")
     assert app._shown_status("x", "summarizing") == "summarizing"
+
+
+def test_stranger_on_the_port_is_never_unpickled(monkeypatch, isolated):
+    """Another local program that connects first and sends a pickle must not
+    get it loaded (that would run its code); the real worker still gets in."""
+    import pickle, socket, struct, threading
+    fake(monkeypatch, isolated)
+    ran = []
+    real_loads = pickle.loads
+    monkeypatch.setattr(wp.pickle, "loads", lambda b: ran.append(b) or real_loads(b))
+    real_popen = wp.subprocess.Popen
+
+    def popen(cmd, **kw):  # connect as an intruder before the worker does
+        port = int(cmd[-2])
+        s = socket.create_connection(("127.0.0.1", port))
+        evil = pickle.dumps(("hello", "x"))
+        s.sendall(struct.pack(">Q", len(evil)) + evil)
+        threading.Timer(2, s.close).start()
+        return real_popen(cmd, **kw)
+    monkeypatch.setattr(wp.subprocess, "Popen", popen)
+    t = wp.IsolatedTranscriber("small", "cpu", "int8")
+    try:
+        assert t.transcribe(SPEECH, 0.0)[0].text == "[small/cpu] puhetta"
+    finally:
+        t.close()
+    assert not any(b"hello" in b and b"x" in b for b in ran)  # the intruder's bytes were never unpickled
