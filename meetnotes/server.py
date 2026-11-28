@@ -511,10 +511,14 @@ class App:
             f = folder / name
             return f.read_text(encoding="utf-8", errors="replace") if f.exists() else ""
         meta = {}
-        try:
-            meta = json.loads(read("meta.json") or "{}")
-        except ValueError:
-            pass
+        for _ in range(3):  # a writer outside the app may be halfway through
+            try:
+                meta = json.loads(read("meta.json") or "{}")
+                if meta or not (folder / "meta.json").exists():
+                    break
+            except ValueError:
+                pass
+            time.sleep(0.05)
         if not read("notes.md"):
             meta["status"] = self._shown_status(mid, meta.get("status", ""))
         notes_json = {}

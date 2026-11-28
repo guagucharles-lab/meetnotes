@@ -226,8 +226,9 @@ def test_retry_notes_from_the_app(app):
         if len(calls) == 1:
             raise RuntimeError("401 invalid x-api-key")
         (f / "notes.md").write_text("# Testi\n")
+        from meetnotes.config import write_json  # atomic, like the app itself
         m = json.loads((f / "meta.json").read_text()); m["status"] = "done"
-        (f / "meta.json").write_text(json.dumps(m))
+        write_json(f / "meta.json", m)
 
     app.summarize_fn = fail_then_succeed
 
