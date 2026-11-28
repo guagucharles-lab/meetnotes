@@ -286,3 +286,7 @@ pre.log { max-height: 320px; overflow: auto; background: var(--surface-2, #f1f3f
 .lang-chips button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
 .translate-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
 .translate-row select { width: auto; flex: 0 1 200px; }
+/* Tabs and the copy button stay in view while scrolling a long transcript. */
+.tabbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0 12px; margin-top: -4px; }
+.tabbar .tabs { margin: 0; }

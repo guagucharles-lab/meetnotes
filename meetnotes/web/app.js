@@ -95,6 +95,7 @@ function progressText(meta) {
   return sp || "Kirjoitetaan muistiinpanoja…";
 }
 const ICONS = {
+  copy: '<svg viewBox="0 0 24 24"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>',
   rec: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg>',
   stop: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
   pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
@@ -703,7 +704,7 @@ async function viewMeeting(main, id) {
     <a class="back" href="#/meetings">‹ Kokoukset</a>
     <div class="page-head"><div><h1>${esc(title)}</h1>
       <div class="muted small">${esc([fmtDate(meta.started_at), fmtDuration(meta.duration_s), platformName(meta.platform), meta.briefing_title ? "valmistelu: " + meta.briefing_title : ""].filter(Boolean).join(" · "))}</div>${statsHtml}</div>
-      <div class="actions" style="margin:0"><button class="btn small" id="copy">Kopioi</button>${hasNotes ? `<a class="btn small" id="mail" href="#">Sähköposti</a>` : ""}</div></div>
+      <div class="actions" style="margin:0">${hasNotes ? `<a class="btn small" id="mail" href="#">Sähköposti</a>` : ""}</div></div>
     ${m.has_audio ? `<div class="audio-row card">
       <audio id="rec-audio" controls preload="none" src="/api/meetings/${encodeURIComponent(id)}/audio.m4a?t=${encodeURIComponent(TOKEN)}"></audio>
       ${STATUS && STATUS.device === "phone"
@@ -718,14 +719,15 @@ async function viewMeeting(main, id) {
     ${meta.translate_error ? `<div class="banner error small" style="margin-bottom:12px">Käännös epäonnistui: ${esc(meta.translate_error)}</div>` : ""}
     ${Object.keys(trs).length ? `<div class="lang-chips" id="lang-chips"><button type="button" data-lang="" aria-pressed="true">Alkuperäinen</button>
       ${Object.entries(trs).map(([c]) => `<button type="button" data-lang="${esc(c)}" aria-pressed="false">${esc(trName(c)[0].toUpperCase() + trName(c).slice(1))}</button>`).join("")}</div>` : ""}
-    <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${k === first}">${l}</button>`).join("")}</div>
+    <div class="tabbar"><div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${k === first}">${l}</button>`).join("")}</div>
+      <button type="button" class="btn small primary" id="copy">${ICONS.copy}Kopioi</button></div>
     <article class="card md" id="content"></article>
     <div class="actions" id="del-row" style="margin-top:20px"><button class="btn ghost small" id="del">Poista kokous</button></div>`;
   let curTab = first;
   const COPY_LABEL = { notes: "Kopioi muistiinpanot", transcript: "Kopioi teksti", mine: "Kopioi omat", live: "Kopioi väliaikaiset" };
   const show = (k) => {
     curTab = k;
-    if ($("#copy")) { $("#copy").textContent = COPY_LABEL[k] || "Kopioi"; $("#copy").hidden = k === "video"; }
+    if ($("#copy")) { $("#copy").innerHTML = ICONS.copy + esc(COPY_LABEL[k] || "Kopioi"); $("#copy").hidden = k === "video"; }
     main.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === k)));
     // The topics are already shown as clickable chapters above: don't repeat them in the notes.
     const notesBody = (notesText() || "").replace(/^# .*\n/, "").replace(/^## (Aiheet|Topics|Ämnen)\n[\s\S]*?(?=^## |(?![\s\S]))/m, chapters.length ? "" : "$&");

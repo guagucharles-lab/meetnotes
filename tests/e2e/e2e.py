@@ -274,6 +274,11 @@ const {{ chromium }} = require("playwright");
   await p.click("[data-tab=transcript]");
   out.copyLabel = await p.textContent("#copy");
   await p.click("#copy"); out.clipText = (await p.evaluate(() => navigator.clipboard.readText())).slice(0, 200);
+  await p.setViewportSize({{ width: 1200, height: 500 }});
+  await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  out.copyVisible = await p.$eval("#copy", (b) => {{ const r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }});
+  await p.screenshot({{ path: "{D}/shots/transcript.png" }});
+  await p.setViewportSize({{ width: 1200, height: 900 }});
   await p.screenshot({{ path: "{D}/shots/meeting.png", fullPage: true }});
   // delete the manual (safe word) meeting with the in-page confirmation
   await p.goto("http://127.0.0.1:{APP}/#/meetings"); await p.waitForSelector(".item");
@@ -338,6 +343,7 @@ const {{ chromium }} = require("playwright");
     check("copy on the transcript tab copies the transcript", ui.get("copyLabel") == "Kopioi teksti"
           and re.match(r"\[00:00:\d\d\] (Minä|Muut): ", ui.get("clipText") or "") is not None, (ui.get("copyLabel"), ui.get("clipText")))
     check("no copy button on the video tab", ui.get("copyHiddenOnVideo") is True)
+    check("copy button stays in view when scrolled down the transcript", ui.get("copyVisible") is True)
     check("delete with in-page confirmation", ui.get("deleted") == 1, ui.get("deleted"))
     check("tasks from notes listed", ui.get("tasks") and "Lähetä raportti" in ui["tasks"], ui.get("tasks"))
     check("task done persists after reload", (ui.get("doneAfterReload") or 0) >= 1)
